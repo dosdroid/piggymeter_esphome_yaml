@@ -90,14 +90,13 @@ binary_sensor:
 
 iec62056:
   update_interval: 60s
-  baud_rate_max: 9600
-   
+  baud_rate_max: 4800
+    #9600 #1200
 
 # Modify the list and OBIS codes if needed
 # Doc:  https://aquaticus.info/iec62056.html
 
 sensor:
-
   - platform: iec62056
     obis: 1.8.0
     name: Absolute active energy total
@@ -112,7 +111,6 @@ sensor:
             if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1) {  // Check if the drift is more than 0.1 kWh
             id(accumulated_energy) = id(absolute_active_energy_total).state;
             }
-        
 
   - platform: iec62056
     name: Instantaneous current in phase L1
@@ -139,31 +137,45 @@ sensor:
     accuracy_decimals: 4
     lambda: !lambda |-
       return id(instantaneous_voltage_in_phase_l1).state * id(instantaneous_current_in_phase_l1).state;
-    update_interval: 10s
+    update_interval: 30s
+
+
   
   - platform: template
     name: "Accumulated Energy Consumption"
     id: accumulated_energy_consumption
     unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
     accuracy_decimals: 3
     lambda: !lambda |-
-      uint32_t now = millis();
-      if (id(last_update) == 0) {
-      id(last_update) = now;
-      }
-      double time_difference = (now - id(last_update)) / 3600000.0; // Convert milliseconds to hours
-      double energy = id(instantaneous_power_in_phase_l1).state * time_difference / 1000.0; // Convert power (W) to energy (kWh)
-      id(accumulated_energy) += energy;
-      id(last_update) = now;
-      return id(accumulated_energy);
-
-
-
+     if (isnan(id(accumulated_energy))) {
+     ESP_LOGE("Custom", "Resetting accumulated_energy due to NaN value.");
+     id(accumulated_energy) = 0.0;
+     }
+     ESP_LOGD("Custom", "Current millis: %u", millis());
+     if (id(last_update) == 0) {
+     ESP_LOGD("Custom", "Initial setup of last_update.");
+     id(last_update) = millis();
+     return 0.0;
+     }
+     uint32_t now = millis();
+     double time_difference = (now - id(last_update)) / 3600000.0;
+     ESP_LOGD("Custom", "Time Diff: %f", time_difference);
+     if (time_difference <= 0) {
+     ESP_LOGW("Custom", "Zero or negative time difference detected.");
+     return id(accumulated_energy);
+     }
+     double power = id(instantaneous_power_in_phase_l1).state;
+     double energy_increment = power * time_difference / 1000.0;
+     ESP_LOGD("Custom", "Power: %f, Energy Increment: %f", power, energy_increment);
+     id(accumulated_energy) += energy_increment;
+     id(last_update) = now;
+     return id(accumulated_energy);
+  
   - platform: internal_temperature
     name: "Wemos S2 mini SoC Temperature"
     update_interval: 60s
-
-
 
 interval:
   - interval: 30s
