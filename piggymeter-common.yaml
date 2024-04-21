@@ -1,36 +1,57 @@
-# Common settings for all boards
-
-esphome:
-  name: ${name}
-  comment: "PiggyMeter IEC62056-21"
-
 esp32:
   variant: ${variant}
   board: ${board}
   framework:
     type: esp-idf
+  
+    
+      #esp-idf
+  
 
 logger:
-  level: DEBUG
-  # level: INFO
+  id: 'loggerid'
+  logs:
+    component: DEBUG
+  # component: INFO
+   
 
 wifi:
   networks:
-    - ssid: !secret wifi_ssid
-      password: !secret wifi_pass
+      ssid: !secret wifi_ssid
+      password: !secret wifi_password
+     #optiona in case you have issues with mDNS
+     #manual_ip:
+    # Set this to the IP of the ESP
+        #static_ip: 192.168.1.123
+    # Set this to the IP address of the router. Often ends with .1
+        #gateway: 192.168.1.1
+    # The subnet of the network. 255.255.255.0 works for most home networks.
+        #subnet: 255.255.255.0
   # Optional domain
   # domain: .lan
   
 api:
   encryption:
-    key: !secret api_key
+    key: !secret encryption_key
 
 ota:
   password: !secret ota_pass
 
+
+
 external_components:
     # IEC62056-21 component
   - source: github://aquaticus/esphome-iec62056
+
+globals:
+  - id: last_update
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: accumulated_energy
+    type: double
+    restore_value: yes
+    initial_value: '0.0'
 
 uart:
   - id: uart_meter
@@ -52,6 +73,9 @@ switch:
     name: 'Readout Trigger'
     id: 'readout_trigger'
 
+  - platform: restart
+    name: "PiggyMeter Restart"
+
 binary_sensor:
   - platform: iec62056
     id: meter_status
@@ -62,92 +86,97 @@ binary_sensor:
     on_release:
       then:
         - switch.turn_off: led_switch
-
+        
 
 iec62056:
   update_interval: 60s
   baud_rate_max: 9600
+   
 
 # Modify the list and OBIS codes if needed
 # Doc:  https://aquaticus.info/iec62056.html
 
 sensor:
   - platform: iec62056
-    obis: 1-0:15.8.0
+    obis: 1.8.0
     name: Absolute active energy total
+    id: absolute_active_energy_total
     unit_of_measurement: kWh
     accuracy_decimals: 3
     device_class: energy
     state_class: total_increasing
+    on_value:
+      then:
+        - lambda: |-
+            if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1.1) { //Update accumulated energy if drift is more than 1.1 kWh
+            id(accumulated_energy) = id(absolute_active_energy_total).state;
+            id(last_update) = millis();  // Update the last update time
+            }
+        
 
   - platform: iec62056
     name: Instantaneous current in phase L1
-    obis: 1-0:31.7.0
+    id: instantaneous_current_in_phase_l1
+    obis: "11.4"
     unit_of_measurement: A
-    accuracy_decimals: 2
-    device_class: current
-    state_class: measurement
-
-  - platform: iec62056
-    name: Instantaneous current in phase L2
-    obis: 1-0:51.7.0
-    unit_of_measurement: A
-    accuracy_decimals: 2
-    device_class: current
-    state_class: measurement
-
-  - platform: iec62056
-    name: Instantaneous current in phase L3
-    obis: 1-0:71.7.0
-    unit_of_measurement: A
-    accuracy_decimals: 2
+    accuracy_decimals: 3
     device_class: current
     state_class: measurement
 
   - platform: iec62056
     name: Instantaneous voltage in phase L1
-    obis: 1-0:32.7.0
+    id: instantaneous_voltage_in_phase_l1
+    obis: "12.4"
     unit_of_measurement: V
     accuracy_decimals: 1
     device_class: voltage
     state_class: measurement
 
-  - platform: iec62056
-    name: Instantaneous voltage in phase L2
-    obis: 1-0:52.7.0
-    unit_of_measurement: V
-    accuracy_decimals: 1
-    device_class: voltage
-    state_class: measurement
-
-  - platform: iec62056
-    name: Instantaneous voltage in phase L3
-    obis: 1-0:72.7.0
-    unit_of_measurement: V
-    accuracy_decimals: 1
-    device_class: voltage
-    state_class: measurement
-
-  - platform: iec62056
-    name: Positive active instantaneous power
-    obis: 1-0:1.7.0
-    unit_of_measurement: kW
+  - platform: template
+    name: "Instantaneous Power in Phase L1"
+    id: instantaneous_power_in_phase_l1
+    unit_of_measurement: 'W'
+    accuracy_decimals: 4
+    lambda: !lambda |-
+      return id(instantaneous_voltage_in_phase_l1).state * id(instantaneous_current_in_phase_l1).state;
+    update_interval: 10s
+  
+  - platform: template
+    name: "Accumulated Energy Consumption"
+    id: accumulated_energy_consumption
+    unit_of_measurement: "kWh"
     accuracy_decimals: 3
-    device_class: energy
-    state_class: measurement
+    device_class: energy  # Important for integration with the energy dashboard
+    state_class: total_increasing  # Important for long-term statistics
+    lambda: !lambda |-
+      if (id(last_update) == 0) {
+      id(last_update) = millis();
+      return id(accumulated_energy);
+      }
+      uint32_t now = millis();
+      double time_difference = (now - id(last_update)) / 3600000.0; // Convert milliseconds to hours
+      double energy = id(instantaneous_power_in_phase_l1).state * time_difference / 1000.0; // Convert power (W) to energy (kWh)
+      id(accumulated_energy) += energy;
+      return id(accumulated_energy);
 
-  - platform: iec62056
-    name: Absolute active instantaneous power
-    obis: 1-0:15.7.0
-    unit_of_measurement: kW
-    accuracy_decimals: 3
-    device_class: energy
-    state_class: measurement
 
-  - platform: iec62056
-    name: Absolute active maximum demand total
-    obis: 1-0:15.6.0
-    unit_of_measurement: kW
-    accuracy_decimals: 3
-    device_class: energy
-    state_class: measurement
+
+
+  - platform: internal_temperature
+    name: "Wemos S2 mini SoC Temperature"
+    update_interval: 60s
+
+
+
+interval:
+  - interval: 30s
+    then:
+      - sensor.template.publish:
+          id: accumulated_energy_consumption
+          state: !lambda 'return id(accumulated_energy);'
+
+  - interval: 20s
+    then:
+      - sensor.template.publish:
+          id: instantaneous_power_in_phase_l1
+          state: !lambda 'return id(instantaneous_power_in_phase_l1).state;'
