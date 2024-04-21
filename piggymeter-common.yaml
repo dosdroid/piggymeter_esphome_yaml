@@ -97,6 +97,7 @@ iec62056:
 # Doc:  https://aquaticus.info/iec62056.html
 
 sensor:
+
   - platform: iec62056
     obis: 1.8.0
     name: Absolute active energy total
@@ -108,9 +109,8 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1.1) { //Update accumulated energy if drift is more than 1.1 kWh
+            if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1) {  // Check if the drift is more than 0.1 kWh
             id(accumulated_energy) = id(absolute_active_energy_total).state;
-            id(last_update) = millis();  // Update the last update time
             }
         
 
@@ -146,19 +146,16 @@ sensor:
     id: accumulated_energy_consumption
     unit_of_measurement: "kWh"
     accuracy_decimals: 3
-    device_class: energy  # Important for integration with the energy dashboard
-    state_class: total_increasing  # Important for long-term statistics
     lambda: !lambda |-
-      if (id(last_update) == 0) {
-      id(last_update) = millis();
-      return id(accumulated_energy);
-      }
       uint32_t now = millis();
+      if (id(last_update) == 0) {
+      id(last_update) = now;
+      }
       double time_difference = (now - id(last_update)) / 3600000.0; // Convert milliseconds to hours
       double energy = id(instantaneous_power_in_phase_l1).state * time_difference / 1000.0; // Convert power (W) to energy (kWh)
       id(accumulated_energy) += energy;
+      id(last_update) = now;
       return id(accumulated_energy);
-
 
 
 
