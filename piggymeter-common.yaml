@@ -108,7 +108,7 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1) {  // Check if the drift is more than 0.1 kWh
+            if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1) {  // Check if the drift is more than 1 kWh
             id(accumulated_energy) = id(absolute_active_energy_total).state;
             }
 
