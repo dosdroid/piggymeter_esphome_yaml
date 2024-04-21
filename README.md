@@ -10,4 +10,6 @@ accumulated_energy_consumption - approximates power consumption based on power a
 
 Also I have added internal SoC temperature readings of esp 32 (Wemos S2 mini) and option to restart device remotely. 
 
+My powermeter is: ZPA ZE110.D0 - https://www.premereni.cz/cs/dulezite-informace/montaz-elektromeru/prehled-instalovanych-elektromeru/ze110d0/ 
+
 For project description see https://aquaticus.info/meter.html
