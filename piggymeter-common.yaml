@@ -53,6 +53,24 @@ globals:
     restore_value: yes
     initial_value: '0.0'
 
+number:
+  - platform: template
+    name: "Energy Drift Threshold"
+    id: energy_drift_threshold
+    min_value: 0.0
+    max_value: 10.0
+    step: 0.1
+    initial_value: 1.0  # Default value
+    unit_of_measurement: "kWh"
+    icon: "mdi:variable"
+    mode: box
+    optimistic: false
+    set_action:
+      - lambda: |-
+          // This lambda is called when the Home Assistant user changes the number.
+          id(energy_drift_threshold).publish_state(x);
+          ESP_LOGD("Custom", "Energy Drift Threshold updated to: %f", x);
+          
 uart:
   - id: uart_meter
     rx_pin: ${rx_pin}
@@ -89,7 +107,7 @@ binary_sensor:
         
 
 iec62056:
-  update_interval: 60s
+  update_interval: 30s
   baud_rate_max: 4800
     #9600 #1200
 
@@ -108,10 +126,12 @@ sensor:
     on_value:
       then:
         - lambda: |-
-            if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > 1) {  // Check if the drift is more than 1 kWh
-            id(accumulated_energy) = id(absolute_active_energy_total).state;
-            }
-
+             double drift_threshold = id(energy_drift_threshold).state;
+             if (fabs(id(absolute_active_energy_total).state - id(accumulated_energy)) > drift_threshold) {
+             ESP_LOGD("Custom", "Adjusting accumulated energy from %f to %f based on drift threshold of %f kWh",
+             id(accumulated_energy), id(absolute_active_energy_total).state, drift_threshold);
+             id(accumulated_energy) = id(absolute_active_energy_total).state;
+             }
   - platform: iec62056
     name: Instantaneous current in phase L1
     id: instantaneous_current_in_phase_l1
@@ -137,13 +157,13 @@ sensor:
     accuracy_decimals: 4
     lambda: !lambda |-
       return id(instantaneous_voltage_in_phase_l1).state * id(instantaneous_current_in_phase_l1).state;
-    update_interval: 30s
+    update_interval: 20s
 
 
   
   - platform: template
-    name: "Accumulated Energy Consumption"
-    id: accumulated_energy_consumption
+    name: "Calculated Energy Consumption"
+    id: calculated_energy_consumption
     unit_of_measurement: "kWh"
     device_class: energy
     state_class: total_increasing
@@ -178,13 +198,13 @@ sensor:
     update_interval: 60s
 
 interval:
-  - interval: 30s
+  - interval: 22s
     then:
       - sensor.template.publish:
-          id: accumulated_energy_consumption
+          id: calculated_energy_consumption
           state: !lambda 'return id(accumulated_energy);'
 
-  - interval: 20s
+  - interval: 21s
     then:
       - sensor.template.publish:
           id: instantaneous_power_in_phase_l1
