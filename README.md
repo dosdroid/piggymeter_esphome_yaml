@@ -1,4 +1,4 @@
-# PiggyMeter ESPHome configurations - added calculated senzors
+# PiggyMeter ESPHome configurations - added calculated sensors
 
 
 My one phase power meter for some reason does not provide enough decimal points on Absolute active energy total but provides enough granularity with Instantaneous voltage in phase L1 and Instantaneous current in phase L1.
