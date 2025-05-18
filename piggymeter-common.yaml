@@ -153,7 +153,7 @@ sensor:
   - platform: template
     name: "Instantaneous Power in Phase L1"
     id: instantaneous_power_in_phase_l1
-    unit_of_measurement: 'W'
+    unit_of_measurement: W
     accuracy_decimals: 4
     lambda: !lambda |-
       return id(instantaneous_voltage_in_phase_l1).state * id(instantaneous_current_in_phase_l1).state;
